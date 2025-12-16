@@ -45,6 +45,10 @@ def create_app() -> FastAPI:
     def health():
         return {"ok": True}
 
+    @app.get("/healthz", include_in_schema=False)
+    def healthz():
+        return {"ok": True}
+
     return app
 
 

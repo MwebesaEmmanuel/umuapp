@@ -5,6 +5,7 @@ from typing import List
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine.url import make_url
 
 
 class Settings(BaseSettings):
@@ -45,6 +46,39 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.cors_origins_raw.split(",") if o.strip()]
+
+    @property
+    def normalized_database_url(self) -> str:
+        raw = (self.database_url or "").strip()
+        if not raw:
+            raw = "sqlite:///./umuapp.db"
+
+        # Common copy/paste mistakes:
+        # - wrapping quotes from shells
+        # - including the `psql` prefix
+        if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+            raw = raw[1:-1].strip()
+        if raw.lower().startswith("psql "):
+            raw = raw[5:].strip()
+            if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+                raw = raw[1:-1].strip()
+
+        # Normalize Postgres schemes for SQLAlchemy + psycopg.
+        if raw.startswith("postgres://"):
+            raw = "postgresql://" + raw[len("postgres://") :]
+        if raw.startswith("postgresql://"):
+            raw = "postgresql+psycopg://" + raw[len("postgresql://") :]
+
+        # Validate and return.
+        try:
+            make_url(raw)
+        except Exception as e:
+            raise ValueError(
+                "Invalid DATABASE_URL. Use e.g. "
+                "'postgresql+psycopg://USER:PASSWORD@HOST/DB?sslmode=require' "
+                "or 'sqlite:///./umuapp.db'."
+            ) from e
+        return raw
 
     @property
     def allowed_domains(self) -> List[str]:
